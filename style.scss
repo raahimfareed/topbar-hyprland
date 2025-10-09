@@ -1,0 +1,32 @@
+// https://gitlab.gnome.org/GNOME/gtk/-/blob/gtk-3-24/gtk/theme/Adwaita/_colors-public.scss
+$bg-color: #1c1917;
+$fg-color: #f5f5f4;
+
+window.Bar {
+  background: transparent;
+  color: $fg-color;
+  font-weight: bold;
+
+  > centerbox {
+    background: $bg-color;
+    border-radius: 100px;
+    margin: 4px 200px;
+  }
+
+  button {
+    &.workspace-btn {
+      border-radius: 250px;
+
+      &.active {
+        background: white !important;
+      }
+      &.inactive {
+        background: transparent;
+      }
+
+      &:hover {
+        background: #292524;
+      }
+    }
+  }
+}
