@@ -1,21 +1,33 @@
 import app from "ags/gtk4/app"
 import { Astal, Gtk, Gdk } from "ags/gtk4"
-import { execAsync } from "ags/process"
 import { createPoll } from "ags/time"
 import { Accessor, createState, For, With } from "ags"
 import AstalHyprland from "gi://AstalHyprland?version=0.1"
 
 export default async function Bar(gdkmonitor: Gdk.Monitor) {
   const hyprland = AstalHyprland.get_default()
-  const time = createPoll("", 1000, "date")
+  const time = createPoll(
+    "Loading time...",
+    60000,
+    "date +\"%A, %d %B %Y, %H:%M\""
+  );
   const { TOP, LEFT, RIGHT } = Astal.WindowAnchor
-  const [currentWorkspace, setCurrentWorkspace] = createState(hyprland.get_focused_workspace().get_id())
-
+  const [currentWorkspace, setCurrentWorkspace] = createState(hyprland.get_focused_workspace())
+  const [windowTitle, setWindowTitle] = createState(hyprland.get_focused_client()?.get_title() ?? "");
   const [workspaces, setWorkspaces] = createState(hyprland.get_workspaces().sort((a, b) => a.get_id() - b.get_id()))
 
+  const iconTheme = Gtk.IconTheme.new();
+
+  console.log(iconTheme.iconNames);
+
   hyprland.connect("notify::focused-workspace", () => {
-    const workspace = hyprland.get_focused_workspace().get_id()
+    const workspace = hyprland.get_focused_workspace()
     setCurrentWorkspace(workspace)
+  })
+
+  hyprland.connect("notify::focused-client", () => {
+    const client = hyprland.get_focused_client();
+    setWindowTitle(client?.get_title() ?? "");
   })
 
   const refreshWorkspaces = () => {
@@ -41,31 +53,42 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
       application={app}
     >
       <centerbox cssName="centerbox">
-        <box $type="start" class="workspace-container">
+        <box
+          $type="start"
+          class="workspace-container"
+          valign={Gtk.Align.CENTER}
+          vexpand={false}
+        >
           <For each={workspaces}>
             {(item) => (
               <button
                 $type="start"
-                cssClasses={currentWorkspace.as((cw) => [
-                  "workspace-btn",
-                  item.get_id() === cw ? "active" : "inactive",
-                ])}
+                class="workspace-btn"
+                valign={Gtk.Align.CENTER}
+                vexpand={false}
                 halign={Gtk.Align.CENTER}
+                cssClasses={currentWorkspace.as((current) => [
+                  'workspace-btn',
+                  current.get_id() === item.get_id() ? "active" : "inactive"
+                ])}
               >
                 <label label={item.get_id().toString()} />
               </button>
             )}
           </For>
         </box>
-        <box $type="center">
-          <label label="Hi" />
+        <box $type="center" class="title-container">
+          <label label={windowTitle} />
         </box>
-        <menubutton $type="end" halign={Gtk.Align.CENTER}>
-          <label label={time} />
-          <popover>
-            <Gtk.Calendar />
-          </popover>
-        </menubutton>
+        <box $type="end">
+          <label class="time" label={time} />
+        </box>
+        {/* <menubutton $type="end" halign={Gtk.Align.CENTER}> */}
+        {/*   <label label={time} /> */}
+        {/*   <popover> */}
+        {/*     <Gtk.Calendar /> */}
+        {/*   </popover> */}
+        {/* </menubutton> */}
       </centerbox>
     </window>
   )
