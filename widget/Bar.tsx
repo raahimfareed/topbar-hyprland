@@ -15,13 +15,17 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
 
   const { TOP, LEFT, RIGHT } = Astal.WindowAnchor
 
+  const display = Gdk.Display.get_default()!;
+  const iconTheme = Gtk.IconTheme.get_for_display(display);
+
   const time = createPoll(
     "Loading time...",
     60000,
     "date +\"%A, %d %B %Y, %H:%M\""
   );
 
-  const [currentWorkspace, setCurrentWorkspace] = createState(hyprland.get_focused_workspace())
+  const [currentWorkspace, setCurrentWorkspace] = createState(hyprland.get_focused_workspace());
+  const [currentClient, setCurrentClient] = createState(hyprland.get_focused_client());
   const [windowTitle, setWindowTitle] = createState(hyprland.get_focused_client()?.get_title() ?? "");
   const [workspaces, setWorkspaces] = createState(hyprland.get_workspaces().sort((a, b) => a.get_id() - b.get_id()))
   const [batteryPercent, setBatteryPercent] = createState(battery.percentage);
@@ -69,12 +73,22 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
   let lastClient: any = null;
   hyprland.connect("notify::focused-client", () => {
     const client = hyprland.get_focused_client();
+    setCurrentClient(client);
+
     if (lastClient) {
       try {
         lastClient.disconnect(lastClient._titleHandlerId);
       } catch (_) {}
     }
+
+    if (!client) {
+      setWindowTitle("");
+      lastClient = null;
+      return;
+    }
+
     setWindowTitle(client?.get_title() ?? "");
+
     if (client) {
       lastClient = client;
       lastClient._titleHandlerId = client.connect("notify::title", () => {
@@ -87,6 +101,7 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
     const percent = battery.percentage;
     setBatteryPercent(percent);
   });
+
   battery.connect("notify::state", () => {
     setIsCharging(battery.state === UPowerGlib.DeviceState.CHARGING);
   });
@@ -131,6 +146,7 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
                 valign={Gtk.Align.CENTER}
                 vexpand={false}
                 halign={Gtk.Align.CENTER}
+                onClicked={() => item.focus()}
                 cssClasses={currentWorkspace.as((current) => [
                   'workspace-btn',
                   current.get_id() === item.get_id() ? "active" : "inactive"
@@ -142,8 +158,19 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
           </For>
         </box>
 
-        <box $type="center" class="container title-container">
-            <label label={windowTitle} />
+        <box
+          $type="center"
+          class="container title-container"
+          spacing={6}
+          visible={windowTitle.as((t) => t.trim() !== "")}
+        >
+          <image
+            iconName={currentClient.as(
+              (client) => client?.get_class() ?? "application-default-icon"
+            )}
+            pixelSize={16}
+          />
+          <label label={windowTitle} />
         </box>
 
         <box $type="end">
@@ -163,12 +190,6 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
             <label class="time" label={time} />
           </box>
         </box>
-        {/* <menubutton $type="end" halign={Gtk.Align.CENTER}> */}
-        {/*   <label label={time} /> */}
-        {/*   <popover> */}
-        {/*     <Gtk.Calendar /> */}
-        {/*   </popover> */}
-        {/* </menubutton> */}
       </centerbox>
     </window>
   )
