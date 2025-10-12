@@ -164,12 +164,12 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
           spacing={6}
           visible={windowTitle.as((t) => t.trim() !== "")}
         >
-          <image
-            iconName={currentClient.as(
-              (client) => client?.get_class() ?? "application-default-icon"
-            )}
-            pixelSize={16}
-          />
+          {/* <image */}
+          {/*   iconName={currentClient.as( */}
+          {/*     (client) => client?.get_class() ?? "application-default-icon" */}
+          {/*   )} */}
+          {/*   pixelSize={16} */}
+          {/* /> */}
           <label label={windowTitle} />
         </box>
 
