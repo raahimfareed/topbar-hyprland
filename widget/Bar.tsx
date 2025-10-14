@@ -5,6 +5,7 @@ import { Accessor, createComputed, createState, For, With } from "ags"
 import AstalHyprland from "gi://AstalHyprland?version=0.1"
 import UPowerGlib from "gi://UPowerGlib?version=1.0"
 import AstalNetwork from "gi://AstalNetwork?version=0.1"
+import AstalWp from "gi://AstalWp?version=0.1"
 
 export default async function Bar(gdkmonitor: Gdk.Monitor) {
   const hyprland = AstalHyprland.get_default()
@@ -12,11 +13,10 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
   const battery = powerClient.get_display_device();
   const network = AstalNetwork.get_default();
   const wifi = network.get_wifi();
+  const wp = AstalWp.get_default();
+  const speaker = wp.audio.default_speaker;
 
   const { TOP, LEFT, RIGHT } = Astal.WindowAnchor
-
-  const display = Gdk.Display.get_default()!;
-  const iconTheme = Gtk.IconTheme.get_for_display(display);
 
   const time = createPoll(
     "Loading time...",
@@ -25,14 +25,32 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
   );
 
   const [currentWorkspace, setCurrentWorkspace] = createState(hyprland.get_focused_workspace());
+
   const [currentClient, setCurrentClient] = createState(hyprland.get_focused_client());
   const [windowTitle, setWindowTitle] = createState(hyprland.get_focused_client()?.get_title() ?? "");
+
   const [workspaces, setWorkspaces] = createState(hyprland.get_workspaces().sort((a, b) => a.get_id() - b.get_id()))
+
   const [batteryPercent, setBatteryPercent] = createState(battery.percentage);
+  const [isCharging, setIsCharging] = createState(battery.state === UPowerGlib.DeviceState.CHARGING);
+  
   const [wifiStrength, setWifiStrength] = createState(wifi?.get_strength());
   const [wifiName, setWifiName] = createState(wifi?.get_ssid() ?? "Offline");
-  const [isCharging, setIsCharging] = createState(battery.state === UPowerGlib.DeviceState.CHARGING);
+  
+  const [volume, setVolume] = createState(speaker?.volume ?? 0);
 
+  const volumeIcon = createComputed(() => {
+    const _volume = volume.get();
+
+    if (_volume === 0) {
+      return "audio-volume-muted-symbolic"
+    }
+
+    print(_volume)
+    return "audio-volume-high-symbolic"
+  })
+
+  // FIX: STATE DOESNT CHANGE BETWEEN CHARGING AND DISCHARGING
   const batteryIcon = createComputed(() => {
     if (isCharging.get()) {
       if (batteryPercent.get() >= 90) return "battery-level-100-charging-symbolic";
@@ -109,6 +127,14 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
   wifi?.connect("notify::strength", () => setWifiStrength(wifi!.get_strength()));
   wifi?.connect("notify::ssid", () => setWifiName(wifi!.get_ssid() ?? "Offline"));
 
+  // audio?.connect("notify::default-speaker", () => {
+  //   setVolume(speaker?.volume ?? 0);
+  // })
+
+  wp?.connect("notify::default-speaker", () => {
+    print(speaker.volume)
+  })
+
   const refreshWorkspaces = () => {
     setWorkspaces(
       Array.from(hyprland.get_workspaces())
@@ -175,6 +201,11 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
 
         <box $type="end">
           <box class="util-container">
+            {/* <box class="container" spacing={6} halign={Gtk.Align.CENTER}> */}
+            {/*   <image iconName={volumeIcon} pixelSize={16} /> */}
+            {/*   <label label={volume((v) => v.toString())} /> */}
+            {/* </box> */}
+
             <box class="container" spacing={6} halign={Gtk.Align.CENTER}>
               <image iconName={batteryIcon} pixelSize={16} />
               <label label={batteryPercent((v) => v.toString() + "%")} />

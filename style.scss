@@ -16,7 +16,7 @@ window.Bar {
   > centerbox {
     // background: $bg-color;
     border-radius: 100px;
-    margin: 4px 200px;
+    margin: 4px 64px;
     padding: 4px;
   }
 
@@ -46,7 +46,6 @@ window.Bar {
       border-radius: 250px;
       padding: 5px;
       min-height: 2px;
-      max-height: 2px;
 
       &.inactive {
         background: transparent;
