@@ -3,18 +3,20 @@ import { Astal, Gtk, Gdk } from "ags/gtk4"
 import { createPoll } from "ags/time"
 import { Accessor, createComputed, createState, For, With } from "ags"
 import AstalHyprland from "gi://AstalHyprland?version=0.1"
-import UPowerGlib from "gi://UPowerGlib?version=1.0"
+// import UPowerGlib from "gi://UPowerGlib?version=1.0"
+import AstalBattery from "gi://AstalBattery?version=0.1"
 import AstalNetwork from "gi://AstalNetwork?version=0.1"
 import AstalWp from "gi://AstalWp?version=0.1"
+import { timeout } from "ags/time"
 
 export default async function Bar(gdkmonitor: Gdk.Monitor) {
   const hyprland = AstalHyprland.get_default()
-  const powerClient = UPowerGlib.Client.new()
-  const battery = powerClient.get_display_device();
+  // const powerClient = UPowerGlib.Client.new()
+  const battery = AstalBattery.get_default();
   const network = AstalNetwork.get_default();
   const wifi = network.get_wifi();
   const wp = AstalWp.get_default();
-  const speaker = wp.audio.default_speaker;
+  const audio = wp?.audio;
 
   const { TOP, LEFT, RIGHT } = Astal.WindowAnchor
 
@@ -31,42 +33,42 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
 
   const [workspaces, setWorkspaces] = createState(hyprland.get_workspaces().sort((a, b) => a.get_id() - b.get_id()))
 
-  const [batteryPercent, setBatteryPercent] = createState(battery.percentage);
-  const [isCharging, setIsCharging] = createState(battery.state === UPowerGlib.DeviceState.CHARGING);
+  const [batteryPercent, setBatteryPercent] = createState(Math.floor(battery.percentage * 100));
+  const [isCharging, setIsCharging] = createState(battery.charging);
   
   const [wifiStrength, setWifiStrength] = createState(wifi?.get_strength());
   const [wifiName, setWifiName] = createState(wifi?.get_ssid() ?? "Offline");
   
-  const [volume, setVolume] = createState(speaker?.volume ?? 0);
+  const [volume, setVolume] = createState(0);
+  const [isMuted, setIsMuted] = createState(false);
 
-  const volumeIcon = createComputed(() => {
-    const _volume = volume.get();
+  timeout(500, () => {
+    const getDefaultSpeaker = () => audio?.get_speakers()?.find(s => s.is_default) ?? null;
 
-    if (_volume === 0) {
-      return "audio-volume-muted-symbolic"
-    }
+    let volumeHandlerId: number | null = null;
+    let muteHandlerId: number | null = null;
+    let currentSpk: any = null;
 
-    print(_volume)
-    return "audio-volume-high-symbolic"
-  })
+    const connectSpeaker = (spk: any) => {
+      // Disconnect old signals
+      if (currentSpk && volumeHandlerId) currentSpk.disconnect(volumeHandlerId);
+      if (currentSpk && muteHandlerId) currentSpk.disconnect(muteHandlerId);
 
-  // FIX: STATE DOESNT CHANGE BETWEEN CHARGING AND DISCHARGING
-  const batteryIcon = createComputed(() => {
-    if (isCharging.get()) {
-      if (batteryPercent.get() >= 90) return "battery-level-100-charging-symbolic";
-      if (batteryPercent.get() >= 70) return "battery-level-80-charging-symbolic";
-      if (batteryPercent.get() >= 50) return "battery-level-60-charging-symbolic";
-      if (batteryPercent.get() >= 30) return "battery-level-40-charging-symbolic";
-      if (batteryPercent.get() >= 10) return "battery-level-20-charging-symbolic";
-      return "battery-level-0-charging-symbolic";
-    } else {
-      if (batteryPercent.get() >= 90) return "battery-level-100-symbolic";
-      if (batteryPercent.get() >= 70) return "battery-level-80-symbolic";
-      if (batteryPercent.get() >= 50) return "battery-level-60-symbolic";
-      if (batteryPercent.get() >= 30) return "battery-level-40-symbolic";
-      if (batteryPercent.get() >= 10) return "battery-level-20-symbolic";
-      return "battery-level-0-symbolic";
-    }
+      currentSpk = spk;
+      if (!spk) return;
+
+      setVolume(spk.volume);
+      setIsMuted(spk.mute);
+
+      volumeHandlerId = spk.connect("notify::volume", () => setVolume(spk.volume));
+      muteHandlerId = spk.connect("notify::mute", () => setIsMuted(spk.mute));
+    };
+
+    connectSpeaker(getDefaultSpeaker());
+
+    audio?.connect("notify::default-speaker", () => {
+      connectSpeaker(getDefaultSpeaker());
+    });
   });
 
   const wifiIcon = createComputed(() => {
@@ -116,24 +118,15 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
   });
 
   battery.connect("notify::percentage", () => {
-    const percent = battery.percentage;
-    setBatteryPercent(percent);
+    setBatteryPercent(Math.floor(battery.percentage * 100));
   });
 
-  battery.connect("notify::state", () => {
-    setIsCharging(battery.state === UPowerGlib.DeviceState.CHARGING);
+  battery.connect("notify::charging", () => {
+    setIsCharging(battery.charging);
   });
 
   wifi?.connect("notify::strength", () => setWifiStrength(wifi!.get_strength()));
   wifi?.connect("notify::ssid", () => setWifiName(wifi!.get_ssid() ?? "Offline"));
-
-  // audio?.connect("notify::default-speaker", () => {
-  //   setVolume(speaker?.volume ?? 0);
-  // })
-
-  wp?.connect("notify::default-speaker", () => {
-    print(speaker.volume)
-  })
 
   const refreshWorkspaces = () => {
     setWorkspaces(
@@ -201,13 +194,33 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
 
         <box $type="end">
           <box class="util-container">
-            {/* <box class="container" spacing={6} halign={Gtk.Align.CENTER}> */}
-            {/*   <image iconName={volumeIcon} pixelSize={16} /> */}
-            {/*   <label label={volume((v) => v.toString())} /> */}
-            {/* </box> */}
+            <box class="container" spacing={6} halign={Gtk.Align.CENTER}>
+              <image
+                iconName={volume.as((v) => {
+                  if (isMuted.get()) return "audio-volume-muted-symbolic";
+                  if (v > 0.66) return "audio-volume-high-symbolic";
+                  if (v > 0.33) return "audio-volume-medium-symbolic";
+                  return "audio-volume-low-symbolic";
+                })}
+                pixelSize={16}
+              />
+              <label label={volume.as((v) => Math.round(v * 100) + "%")} />
+            </box>
 
             <box class="container" spacing={6} halign={Gtk.Align.CENTER}>
-              <image iconName={batteryIcon} pixelSize={16} />
+              <image
+                iconName={isCharging.as((charging) => {
+                  const percent = batteryPercent.get();
+                  const suffix = charging ? "charging-symbolic" : "symbolic";
+                  if (percent >= 90) return `battery-level-100-${suffix}`;
+                  if (percent >= 70) return `battery-level-80-${suffix}`;
+                  if (percent >= 50) return `battery-level-60-${suffix}`;
+                  if (percent >= 30) return `battery-level-40-${suffix}`;
+                  if (percent >= 10) return `battery-level-20-${suffix}`;
+                  return `battery-level-0-${suffix}`;
+                })}
+                pixelSize={16}
+              />
               <label label={batteryPercent((v) => v.toString() + "%")} />
             </box>
 
