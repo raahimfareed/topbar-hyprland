@@ -4,6 +4,9 @@ import Bar from "./widget/Bar"
 
 app.start({
   css: style,
+  requestHandler(_request, respond) {
+    respond("ok");
+  },
   main() {
     app.get_monitors().map(Bar)
   },
