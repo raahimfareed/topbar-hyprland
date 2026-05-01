@@ -36,8 +36,12 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
   const [batteryPercent, setBatteryPercent] = createState(Math.floor(battery.percentage * 100));
   const [isCharging, setIsCharging] = createState(battery.charging);
   
-  const [wifiStrength, setWifiStrength] = createState(wifi?.get_strength());
-  const [wifiName, setWifiName] = createState(wifi?.get_ssid() ?? "Offline");
+  const [wifiStrength, setWifiStrength] = createState<number | undefined>(
+    network.get_wifi()?.get_strength()
+  );
+  const [wifiName, setWifiName] = createState(
+    network.get_wifi()?.get_ssid() ?? "Offline"
+  );
   
   const [volume, setVolume] = createState(0);
   const [isMuted, setIsMuted] = createState(false);
@@ -71,15 +75,33 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
     });
   });
 
-  const wifiIcon = createComputed(() => {
-    if (wifiStrength === undefined || wifiStrength.get() === undefined) {
-      return "network-wireless-offline-symbolic";
+  const connectWifi = () => {
+    const w = network.get_wifi();
+    if (!w) {
+      setWifiName("Offline");
+      setWifiStrength(undefined);
+      return;
     }
 
-    if (wifiStrength.get()! > 75) return "network-wireless-signal-excellent-symbolic";
-    if (wifiStrength.get()! > 50) return "network-wireless-signal-good-symbolic";
-    if (wifiStrength.get()! > 25) return "network-wireless-signal-ok-symbolic";
-    if (wifiStrength.get()! > 0) return "network-wireless-signal-weak-symbolic";
+    setWifiStrength(w.get_strength());
+    setWifiName(w.get_ssid() ?? "Offline");
+
+    w.connect("notify::strength", () => setWifiStrength(w.get_strength()));
+    w.connect("notify::ssid", () => setWifiName(w.get_ssid() ?? "Offline"));
+  };
+
+  connectWifi();
+
+  const wifiIcon = createComputed(() => {
+    const strength = wifiStrength.get();
+
+    if (strength === undefined || strength === null) {
+      return "network-wireless-offline-symbolic";
+    }
+    if (strength > 75) return "network-wireless-signal-excellent-symbolic";
+    if (strength > 50) return "network-wireless-signal-good-symbolic";
+    if (strength > 25) return "network-wireless-signal-ok-symbolic";
+    if (strength > 0) return "network-wireless-signal-weak-symbolic";
 
     return "network-wireless-offline-symbolic";
   });
@@ -125,8 +147,7 @@ export default async function Bar(gdkmonitor: Gdk.Monitor) {
     setIsCharging(battery.charging);
   });
 
-  wifi?.connect("notify::strength", () => setWifiStrength(wifi!.get_strength()));
-  wifi?.connect("notify::ssid", () => setWifiName(wifi!.get_ssid() ?? "Offline"));
+  network.connect("notify::wifi", () => connectWifi());
 
   const refreshWorkspaces = () => {
     setWorkspaces(
